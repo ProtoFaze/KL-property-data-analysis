@@ -1,6 +1,7 @@
 require(dplyr)
 require(DataExplorer)
 require(readxl)
+require(here)
 
 # todo
 # - Clean out empty price
@@ -8,48 +9,60 @@ require(readxl)
 # - impute missing values with dataExplorer
 # - mutate and clean with functions
 
-data <- readxl::read_excel("dataset/kl_property_data.xlsx",
-  sheet = 1, 
-  col_names = TRUE, 
-  na = c("NA", "-"))
+
+data <- read.csv(here("dataset", "location_carpark_type_filtered.csv"))
 
 #initial analysis
-print("summary") # nolint
-print(summary(data)) # nolint
-print("class\n") # nolint
-print(class(data)) # nolint
-print("first 10") # nolint
-print(head(data, 10)) # nolint
-print("last 5") # nolint
-print(tail(data, 5)) # nolint
-print("Number of rows") # nolint
-print(nrow(data)) # nolint
-print("Number of columns") # nolint
-print(ncol(data)) # nolint
-print("Dims") # nolint
-print(dim(data)) # nolint
-print("Column names") # nolint
-print(colnames(data)) # nolint
+"summary"
+summary(data) # nolint
+"class" # nolint
+class(data) # nolint
+"first 10" # nolint
+head(data, 10) # nolint
+"last 5" # nolint
+tail(data, 5) # nolint
+"Number of rows" # nolint
+nrow(data) # nolint
+"Number of columns" # nolint
+ncol(data) # nolint
+"Dims" # nolint
+dim(data) # nolint
+"Column names" # nolint
+colnames(data) # nolint
+glimpse(data) # nolint
 
-#data cleaning
-data <- data[complete.cases(data), ] ##remove NA
-print(nrow(data))
+#create a variable to check all the different types of property
+property_type <- data %>% 
+  group_by(Property.Type) %>%
+  summarise(frequency = n()) %>%
+  arrange(desc(frequency))
+#impute property type with NA values with "NA"
+data <- replace(data, data =='', NA)
 
-# convert_to_square_feet <- function(measurement) {
-#  # Check if the measurement is in the format 'width x height'
-#  if (grepl("x", measurement)) {
-#    # Extract the width and height
-#    parts <- strsplit(measurement, "x")[[1]]
-#    width <- as.numeric(parts[1])
-#    height <- as.numeric(parts[2])
-#    # Multiply the width and height to get the total area in square feet
-#    area <- width * height
-#  } else {
-#    # If the measurement is just a number followed by 'sq. ft.', extract the number
-#    area <- as.numeric(strsplit(measurement, " ")[[1]][1])
-#  }
-#  return(area)
-# }
+proptype <- data %>% 
+  group_by(Location,Property.Type) %>%
+  summarise(frequency = n()) %>%
+  arrange(Location, desc(frequency))
+mode_property_type <- proptype %>%
+  group_by(Location) %>%
+  filter(frequency == max(frequency))
+nrow(mode_property_type)
+# Keep only the first mode for each Location
+mode_property_type <- mode_property_type %>%
+  group_by(Location) %>%
+  slice(1)%>%
+  select(Location, Property.Type)
+nrow(mode_property_type)
+# Join the data frames
+data <- left_join(data, mode_property_type, by = "Location", suffix = c("", ".mode"))
 
-# data <- data %>%
-#   mutate(AreaInSqFt = convert_to_square_feet(Size))
+# Replace NA values in Property.Type with the mode of Property.Type for each Location
+data[is.na(data$Property.Type),]
+data$Property.Type[is.na(data$Property.Type)] <- data$Property.Type.mode[is.na(data$Property.Type)]
+
+# Remove the extra column
+data$Property.Type.mode <- NULL
+data[is.na(data$Property.Type),]
+
+#impute property type with NA string with mode of property type for each location
+write.csv(data, here("dataset", "location_carpark_type_filtered.csv"))
